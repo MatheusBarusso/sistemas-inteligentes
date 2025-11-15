@@ -1,6 +1,19 @@
-O treinamento realizado pela função "train" dos códigos "classifier.py", "perceptron_linear.py" e "breast_cancer_brute_force.py" é um método estocástico conhecido como busca aleatória. No treinamento de máquina de uma rede neural o objetivo é encontrar os pesos da rede visando minimizar uma função custo de perdas entre a saída da rede e o conjunto de treinamento, conhecido como erro de treinamento.
+*N*o código "classifier.py" é implementado um classificador linear simples. Antes de começar a atividade familiarize-se com este código para entender seus componentes. Eles são utilizados no próximo item.*
+*A versão bidimensional do classificador linear é implementada em "perceptron_linear.py". Atente-se às linhas 53-62, há três conjuntos de dados para treinamento para portas lógicas: AND, NAND, OR. Apenas um conjunto, o par (x,y) pode ser treinado por vez. Treine a rede para cada um destes conjuntos, comentando e descomentando as respectivas linhas.*
 
-Responda:
-1. Qual a diferença entre as abordagens de treinamento dos códigos "classifier.py" e "breast_cancer_brute_force.py"?
+*No código "breast_cancer_brute_force.py" tem-se um exemplo de aplicação do classificador linear ao conjunto de dados Breast Cancer Wisconsin (Diagnostic) Data Set, com 30 atributos (entradas) descritores de características de uma célula e um diagnóstico (saída) com duas classes possíveis, maligno ou benigno.*
+*Na linha 71 está sendo realizada a seleção de um único atributo para o treinamento. Isso ocorre para cada um dos atributos, portanto a rede é treinada um total de 30 vezes considerando individualmente cada atributo por treino. Os atributos com melhores resultados classificatórios são considerados linearmente separáveis.*
+
+*O treinamento realizado pela função "train" dos códigos "classifier.py", "perceptron_linear.py" e "breast_cancer_brute_force.py" é um método estocástico conhecido como busca aleatória. No treinamento de máquina de uma rede neural o objetivo é encontrar os pesos da rede visando minimizar uma função custo de perdas entre a saída da rede e o conjunto de treinamento, conhecido como erro de treinamento.*
+
+***
+
+**Responda**:
+1. *Qual a diferença entre as abordagens de treinamento dos códigos "classifier.py" e "breast_cancer_brute_force.py"?*
     - Ambos classifier.py e perceptron_linear.py só finalizam o processo quando o MSE encontrado é igual a 0. Por outro lado breast_cancer_brute_force.py utiliza busca estocátisca, isso é, ira procurar a melhor combinação de atributos aleatoriamente e fará até 10000 tentativas (definidas no código) para encontrar o menor MSE e esse então será o resultado. 
-- Apresente uma solução de melhoria ao treinamento da rede. Procure utilizer uma biblioteca de otimização tal como a scipy.optimize.
+
+2. *Apresente uma solução de melhoria ao treinamento da rede. Procure utilizer uma biblioteca de otimização tal como a scipy.optimize.*
+    - Para a otimização utilizando scipy foi implementado o seguinte:
+        - A função ``` sigmoid(z) ```, que substitui a função degrau ``` heaviside(x) ``` para uma função com descida "lisa" (em formato de 'S'), diferente da descida abrupta (1 ou 0) da função degrau, pois nesse caso o gradiente da descida é sempre 0.
+            - Como mudamos ``` heaviside(x) ``` para ``` sigmoid(z) ```, precisamos mudar a maneira que avaliamos o erro, que antes era por meio de MSE (Mean Squared Error) pelo método ``` logistic_loss(params, X, y) ```, que permite que o erro seja diferenciável, para que a sua inclinação possa ser calculada por meio do erro e da 'intensidade de descida'.
+        - A função ``` new_train(x, y) ```, por meio do método ``` optimize.minimize(...) ```, onde ``` fun ``` é o erro, ``` jac ``` é a 'descida' (jacobiana), ``` x0 ``` é o ponto de partida e ``` method ```, que é método de 'locomoção', nesse caso foi utilizado L-BFGS-B (um método extremamente eficiente) para esse tipo de operação.
