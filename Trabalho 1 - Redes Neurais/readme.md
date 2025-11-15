@@ -1,0 +1,6 @@
+O treinamento realizado pela função "train" dos códigos "classifier.py", "perceptron_linear.py" e "breast_cancer_brute_force.py" é um método estocástico conhecido como busca aleatória. No treinamento de máquina de uma rede neural o objetivo é encontrar os pesos da rede visando minimizar uma função custo de perdas entre a saída da rede e o conjunto de treinamento, conhecido como erro de treinamento.
+
+Responda:
+1. Qual a diferença entre as abordagens de treinamento dos códigos "classifier.py" e "breast_cancer_brute_force.py"?
+    - Ambos classifier.py e perceptron_linear.py só finalizam o processo quando o MSE encontrado é igual a 0. Por outro lado breast_cancer_brute_force.py utiliza busca estocátisca, isso é, ira procurar a melhor combinação de atributos aleatoriamente e fará até 10000 tentativas (definidas no código) para encontrar o menor MSE e esse então será o resultado. 
+- Apresente uma solução de melhoria ao treinamento da rede. Procure utilizer uma biblioteca de otimização tal como a scipy.optimize.
