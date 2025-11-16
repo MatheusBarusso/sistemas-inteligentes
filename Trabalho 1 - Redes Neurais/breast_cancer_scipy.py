@@ -9,6 +9,7 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 from collections import namedtuple
+from scipy import optimize
 
 # Heaviside step function
 def heaviside(x):
@@ -32,6 +33,45 @@ def loss(x, y, w, b):
         mse += math.pow(error, 2)/n
         
     return mse
+
+def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def logistic_loss(params, X, y):
+    d = X.shape[1]
+    w = params[:d]
+    b = params[d]
+    z = X.dot(w) + b
+    p = sigmoid(z)
+    epsilon = 1e-12
+    loss = -np.mean(y * np.log(p + epsilon) + (1 - y) * np.log(1 - p + epsilon))
+    diff = (p - y) / X.shape[0]
+    gradiente_w = X.T.dot(diff)
+    gradiente_b = np.sum(diff)
+    gradiente = np.concatenate([gradiente_w, np.array([gradiente_b])])
+    return loss, gradiente
+
+def new_train(x, y):
+    X = np.array(x, dtype=float)
+    yv = np.array(y, dtype=float)
+    n, d = X.shape
+    inicial = np.zeros(d + 1)
+    def obj(params):
+        loss, gradiente = logistic_loss(params, X, yv)
+        return loss, gradiente
+    resultado = optimize.minimize(fun=lambda p: obj(p)[0],
+                                  x0 = inicial,
+                                  jac=lambda p: obj(p)[1],
+                                  method='L-BFGS-B',
+                                  options={'maxiter': 1000})
+    params_otimiz = resultado.x
+    w_otimiz = params_otimiz[:d]
+    b_otimiz = params_otimiz[d]
+
+    b_otimiz = float(b_otimiz)
+    mse_class = loss(X, yv, w_otimiz, b_otimiz)
+    
+    return mse_class, w_otimiz, b_otimiz
 
 # Trains a linear classifier
 # stochastic search for values of weights and bias until MSE is zero
@@ -80,7 +120,7 @@ for i in range(len(data.data[0])):
     y = Y
     
     # Train the linear classifier
-    best_mse, w, b = train(x, y)
+    best_mse, w, b = new_train(x, y)
     print('{}: {}'.format(i,best_mse))
 
 # Plot decision boundary
