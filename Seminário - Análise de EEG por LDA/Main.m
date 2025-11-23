@@ -1,12 +1,16 @@
-%% Carregando os dados......................................................
-clear; clc; close all
+%% Carregando os dados.....................................................
+% Statistics and Machine Learning Toolbox necessário para funcionamento
+clear all; clc; close all
 
 pathdataset = './dataset/';
 nome_input = 'EEG_Data_BCI_IV_2a.mat';
 nome_output = 'BCI_IV2a_preprocessed.mat';
 load([pathdataset nome_input]);
 
+disp('Etapa de Carregamento Finalizada')
+disp('-------------------------------------------------------------------')
 %..........................................................................
+
 
 %% Visualização -> Variáveis Sujeito, Época e Canal
 Sujeito = 1;
@@ -21,7 +25,10 @@ PlotDiffCanal(EEG_data, labels, chan_names, fs, Sujeito, canais);
 PlotTopologia(EEG_data, chan_names, chan_coords, fs, Sujeito, Epoca);
 PlotPSDCanal(EEG_data, chan_names, fs, Sujeito, Epoca);
 
+disp('Etapa de visualização Finalizada');
+disp('-------------------------------------------------------------------')
 %..........................................................................
+
 
 %% Pré-processamento
 %Filtragem
@@ -40,10 +47,11 @@ LimiarAmplitude = 100;
 [bad_epoch, EEG_clean] = PPArtefatos(EEG_data, LimiarAmplitude);
 fprintf('Total de trials ruins: %d\n', sum(bad_epoch(:)));
 
-%Remoção de artefatos
+%Remoção de artefatos -> Descomentar as linhas abaixo se for processar
 %[EEG_clean, S_all, W_all, removed_all] = PPRemoveArtefatosICA(EEG_data);
 %save([pathdataset 'EEG_Data_SemArtefatos.mat'],'EEG_clean','S_all','W_all','removed_all','-v7.3');
 
+%Comentar a linha abaixo se for rodar a remoção de artefatos
 load([pathdataset 'EEG_Data_SemArtefatos.mat']); %-> Load p/ teste
 
 EEG_data = EEG_clean; 
@@ -54,22 +62,117 @@ fs2 = 128;
 [EEG_data,fs] = PPReamostragem(EEG_data, fs, fs2);
 
 %Normalização
-MetodoNormalizacao = 'zscore'; %Para [0,1]: 'minmax'; Para Z-score: 'zscore'; Para Mediana/IQR:'robust' 
+MetodoNormalizacao = 'zscore';
 EEG_data = PPNormalizar(EEG_data, MetodoNormalizacao);
 
 %Re-referenciação
-TipoReRef = 'CAR'; %Para Média comum:'CAR',Sagital:'Cz', Mastoides: 'Mastoides', Laplace: 'Laplaciano'
+TipoReRef = 'CAR'; 
 EEG_data = PPReRe(EEG_data, chan_names, chan_coords, TipoReRef);
 
 %Segmentação em épocas
 window_sec = 1;      % 1 segundo por janela
 overlap_sec = 0.5;   % 50% de sobreposição
-[EEG_data,NumEpocas] = PPSegmentar(EEG_data, fs, window_sec, overlap_sec);
+[EEG_epochs, NumEpocas] = PPSegmentar(EEG_data, fs, window_sec, overlap_sec);
 
+disp('Etapa de Pré-Processamento finalizada');
+disp('-------------------------------------------------------------------')
 %..........................................................................
+
 
 %% Mineração
 %Estatísica
+Medidas_estatisticas = MNMedidasEstatisticas(EEG_data);
+
+%Parâmetros de Hjorth
+Medidas_hjorth = MNMedidasHjorth(EEG_data);
+
+%Potência das bandas -> Descomentar linhas abaixo para rodar mineração
+%fs = 128;
+%plot_flag = 0;
+%band_features = MNPotenciaBandas(EEG_epochs, fs, chan_names, plot_flag);
+
+%Comentar a linha abaixo se for rodar a mineração
+load([pathdataset 'Medidas_Bandas_Potencia.mat']); % -> Load p/ testes
+
+disp('Etapa de Mineração Finalizada');
+disp('-------------------------------------------------------------------')
+%..........................................................................
+
+
+%% Conectividade Funcional
+%Correlação
+correlacao = CFCorrelacao(EEG_data);
+
+%% Phase-Locking-Value -> "Sincronização de sinais EEG"
+plv = CFPLV(EEG_data, fs);
+
+%% Medidas Estastísticas
+Medidas_correlacao_estastisticas = CFMedidasEstatisticas(correlacao);
+Medidas_correlacao_redes = CFMedidasRedes(correlacao);
+
+%% Medidas Topológicas
+Medidas_PLV_estatisticas = CFMedidasEstatisticas(plv);
+Medidas_PLV_Redes = CFMedidasRedes(plv);
+
+disp('Etapa de Conectividade Funcional Finalizada');
+disp('-------------------------------------------------------------------')
+%..........................................................................
+
+
+%% Matriz de Medidas
+%Montagem da Matriz
+[X, feature_names] = MDMMontarMatriz(Medidas_estatisticas, Medidas_hjorth);
+
+%Normalização da Matriz com Medidas Concatenadas
+X_norm = MDMNormalizar(X, 'zscore');
+
+disp('Etapa de Matriz de Medidas Finalizada');
+disp('-------------------------------------------------------------------')
+%..........................................................................
+
+
+%% Redução de Dimensionalidade
+%Reducao de Dimensionalidade
+[X_pca, V, lambda, explained] = RDPCA(X_norm, 'var', 95);
+
+%Plotar PCA
+RDPlotar(explained, lambda);
+
+disp('Etapa de Redução de Dimensionalidade Finalizada');
+disp('-------------------------------------------------------------------')
+%..........................................................................
+
+
+%% Classificação
+%Vetor das classes
+[NumSujeito,NumCan,NumAmo,NumEpocas,NumTrial] = size(EEG_data);
+Y = CLMontarVetor(NumSujeito, NumTrial, NumEpocas, labels);
+
+%Validação Cruzada -> k-fold
+folds = CLKFold(X, Y, 'KFold', [], 5);
+
+%Classificar -> KFold ou LOSO // LDA
+metodo_validacao = 'KFold';
+classificador = 'LDA';
+resultados = CLTreinamento(X, Y, metodo_validacao, classificador);
+
+disp('Etapa de Classificação Finalizada');
+disp('-------------------------------------------------------------------')
+%..........................................................................
+
+
+%% Análise de Desempenho
+%Análise Final
+Acuracia = resultados.acuracia;
+MatrizConfusao = resultados.cm;
+ADResultados(MatrizConfusao);
+%..........................................................................
+
+%%
+% % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
+% % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
+
+
 %% Seção de Funções
 % Visualização -> Prefixo Plot.............................................
 function PlotCanal(EEG_data,chan_names,fs,Sujeito,Canal,Epoca)
@@ -208,6 +311,7 @@ sgtitle(sprintf('PSD - Sujeito %d, Trial %d', Sujeito, Trial), 'FontSize',14);
 
 end
 %..........................................................................
+
 
 % Pré-Processamento -> Prefixo PP..........................................
 function EEG_data = PPFiltro(EEG_data,fs)
@@ -431,25 +535,6 @@ function EEG_data = PPNormalizar(EEG_data, metodo)
                         else
                             sinal = sinal - mu; % Evita divisão por zero
                         end
-
-                    case 'minmax'
-                        x_min = min(sinal);
-                        x_max = max(sinal);
-                        if x_max ~= x_min
-                            sinal = (sinal - x_min) / (x_max - x_min);
-                        else
-                            sinal = zeros(size(sinal)); % Evita NaN
-                        end
-
-                    case 'robust'
-                        med = median(sinal);
-                        IQRv = iqr(sinal); % Interquartile Range
-                        if IQRv ~= 0
-                            sinal = (sinal - med) / IQRv;
-                        else
-                            sinal = sinal - med;
-                        end
-
                     otherwise
                         error('Método inválido. Use: zscore, minmax ou robust');
                 end
@@ -473,52 +558,9 @@ switch lower(method)
         for ch = 1:C
             EEG_ref(:,ch,:,:) = EEG_data(:,ch,:,:) - mean_ch;
         end
-
-    case 'cz'
-        % Referência em Cz
-        idxCz = find(strcmpi(chan_names,'Cz'),1);
-        if isempty(idxCz)
-            error('Canal Cz não encontrado.');
-        end
-        Cz_sig = EEG_data(:,idxCz,:,:);
-        for ch = 1:C
-            EEG_ref(:,ch,:,:) = EEG_data(:,ch,:,:) - Cz_sig;
-        end
-
-    case 'mastoides'
-        % Referência A1/A2
-        idxA1 = find(strcmpi(chan_names,'A1'),1);
-        idxA2 = find(strcmpi(chan_names,'A2'),1);
-        if isempty(idxA1) || isempty(idxA2)
-            error('Canais A1/A2 não encontrados.');
-        end
-        ref_sig = (EEG_data(:,idxA1,:,:) + EEG_data(:,idxA2,:,:))/2;
-        for ch = 1:C
-            EEG_ref(:,ch,:,:) = EEG_data(:,ch,:,:) - ref_sig;
-        end
-
-    case 'laplaciano'
-        % Laplaciano espacial (canais vizinhos)
-        if isempty(chan_coords)
-            error('Para Laplaciano, chan_coords deve ser fornecido.');
-        end
-        % Distância euclidiana entre canais
-        dist = pdist2(chan_coords, chan_coords);
-        for ch = 1:C
-            % vizinhos próximos (dist < threshold)
-            threshold = 0.2; % ajustar conforme escala
-            neighbors = find(dist(ch,:) > 0 & dist(ch,:) <= threshold);
-            if isempty(neighbors)
-                continue;
-            end
-            mean_neighbors = mean(EEG_data(:,neighbors,:,:),2);
-            EEG_ref(:,ch,:,:) = EEG_data(:,ch,:,:) - mean_neighbors;
-        end
-
     otherwise
         error('Método desconhecido. Opções: CAR, Cz, Mastoides, Laplaciano.');
 end
-
 end
 
 function [EEG_epochs,num_epochs] = PPSegmentar(EEG_data, fs, window_sec, overlap_sec)
@@ -529,7 +571,7 @@ step = round((window_sec - overlap_sec) * fs);
 num_epochs = floor((N - win_len)/step) + 1;
 
 EEG_epochs = zeros(S, C, win_len, num_epochs, T);
-
+S
 for s = 1:S
     for tr = 1:T
         start_idx = 1;
@@ -542,4 +584,585 @@ for s = 1:S
 end
 
 end
+%..........................................................................
+
+
+% Mineração -> Prefixo MN..................................................
+function features = MNMedidasEstatisticas(EEG_epochs)
+[S, C, N, E, T] = size(EEG_epochs);
+
+% Inicializar arrays
+features.mean = zeros(S,C,E,T);
+features.var  = zeros(S,C,E,T);
+features.std  = zeros(S,C,E,T);
+features.ptp  = zeros(S,C,E,T);
+features.rms  = zeros(S,C,E,T);
+features.kurt = zeros(S,C,E,T);
+features.skew = zeros(S,C,E,T);
+
+% Loop para cada dimensão
+for s = 1:S
+    for ch = 1:C
+        for tr = 1:T
+            for e = 1:E
+                epoch = squeeze(EEG_epochs(s,ch,:,e,tr));
+                features.mean(s,ch,e,tr) = mean(epoch);
+                features.var(s,ch,e,tr)  = var(epoch);
+                features.std(s,ch,e,tr)  = std(epoch);
+                features.ptp(s,ch,e,tr)  = max(epoch) - min(epoch);
+                features.rms(s,ch,e,tr)  = rms(epoch);
+                features.kurt(s,ch,e,tr) = kurtosis(epoch);
+                features.skew(s,ch,e,tr) = skewness(epoch);
+            end
+        end
+    end
+end
+end
+
+function hjorth = MNMedidasHjorth(EEG_epochs)
+[S, C, N, E, T] = size(EEG_epochs);
+
+% Inicializar arrays
+hjorth.activity   = zeros(S,C,E,T);
+hjorth.mobility   = zeros(S,C,E,T);
+hjorth.complexity = zeros(S,C,E,T);
+
+for s = 1:S
+    for ch = 1:C
+        for tr = 1:T
+            for e = 1:E
+                epoch = squeeze(EEG_epochs(s,ch,:,e,tr));
+
+                % Activity: variância do sinal
+                var_x = var(epoch);
+                hjorth.activity(s,ch,e,tr) = var_x;
+
+                % Mobility: sqrt(var(x')/var(x))
+                dx = diff(epoch);
+                var_dx = var(dx);
+                hjorth.mobility(s,ch,e,tr) = sqrt(var_dx / var_x);
+
+                % Complexity: sqrt(var(dx')/var(dx)) / mobility
+                ddx = diff(dx);
+                var_ddx = var(ddx);
+                hjorth.complexity(s,ch,e,tr) = sqrt(var_ddx / var_dx) / hjorth.mobility(s,ch,e,tr);
+            end
+        end
+    end
+end
+
+end
+
+function bandpower_features = MNPotenciaBandas(EEG_epochs, fs, chan_names, plot_flag)
+
+% Definir bandas
+bands = struct('delta',[0.5 4], 'theta',[4 8], 'alpha',[8 13], 'beta',[13 30], 'gamma',[30 45]);
+
+[S, C, N, E, T] = size(EEG_epochs);
+
+% Inicializar arrays
+bandpower_features.delta = zeros(S,C,E,T);
+bandpower_features.theta = zeros(S,C,E,T);
+bandpower_features.alpha = zeros(S,C,E,T);
+bandpower_features.beta  = zeros(S,C,E,T);
+bandpower_features.gamma = zeros(S,C,E,T);
+
+% Calcular bandpower
+for s = 1:S
+    for ch = 1:C
+        for tr = 1:T
+            for e = 1:E
+                epoch = squeeze(EEG_epochs(s,ch,:,e,tr));
+                
+                bandpower_features.delta(s,ch,e,tr) = bandpower(epoch, fs, bands.delta);
+                bandpower_features.theta(s,ch,e,tr) = bandpower(epoch, fs, bands.theta);
+                bandpower_features.alpha(s,ch,e,tr) = bandpower(epoch, fs, bands.alpha);
+                bandpower_features.beta(s,ch,e,tr)  = bandpower(epoch, fs, bands.beta);
+                bandpower_features.gamma(s,ch,e,tr) = bandpower(epoch, fs, bands.gamma);
+            end
+        end
+    end
+end
+
+% Plotar média por canal
+if plot_flag
+    figure;
+    for ch = 1:C
+        % Média sobre sujeitos, epochs e trials
+        mean_delta = mean(bandpower_features.delta(:,ch,:,:), [1 3 4]);
+        mean_theta = mean(bandpower_features.theta(:,ch,:,:), [1 3 4]);
+        mean_alpha = mean(bandpower_features.alpha(:,ch,:,:), [1 3 4]);
+        mean_beta  = mean(bandpower_features.beta(:,ch,:,:),  [1 3 4]);
+        mean_gamma = mean(bandpower_features.gamma(:,ch,:,:), [1 3 4]);
+        
+        subplot(ceil(C/4),4,ch);
+        bar([mean_delta mean_theta mean_alpha mean_beta mean_gamma]);
+        set(gca,'XTickLabel',{'δ','θ','α','β','γ'});
+        ylabel('Power (\muV^2)');
+        title(chan_names{ch}, 'Interpreter','none');
+    end
+    sgtitle('Bandpower médio por canal');
+end
+end
+%..........................................................................
+
+
+% Conectividade Funcional -> Prefixo CF....................................
+function corr_mats = CFCorrelacao(EEG_data)
+    % Dimensões dos dados
+    nSuj = size(EEG_data, 1);
+    nTrials = size(EEG_data, 2);
+    nEpocas = size(EEG_data, 3);
+    nCanais = size(EEG_data, 4);
+
+    % Pré-alocar célula para armazenar as matrizes
+    corr_mats = cell(nSuj, nTrials, nEpocas);
+
+    % Loop sobre tudo
+    for s = 1:nSuj
+        fprintf('Processando Sujeito %d/%d...\n', s, nSuj);
+
+        for t = 1:nTrials
+            for e = 1:nEpocas
+
+                % Dados: [Canais × Amostras]
+                sinal = squeeze(EEG_data(s, t, e, :, :));   
+
+                % Matriz de correlação entre canais
+                corrMat = corrcoef(sinal');   % transposto para [Amostras × Canais]
+
+                % Guardar
+                corr_mats{s, t, e} = corrMat;
+            end
+        end
+    end
+    fprintf('Finalizado: Matrizes de correlação geradas!\n');
+end
+
+function plv_mats = CFPLV(EEG_data, fs)
+
+[nSuj, nTrials, nEp, nCan, nAmo] = size(EEG_data);
+plv_mats = cell(nSuj, nTrials, nEp);
+
+for s = 1:nSuj
+    fprintf('Processando Sujeito %d/%d...\n', s, nSuj);
+    for t = 1:nTrials
+        for e = 1:nEp
+            % Sinal do trial/época atual [Canais x Amostras]
+            sinal = squeeze(EEG_data(s,t,e,:,:));
+            % Transformada de Hilbert para fase
+            phase = angle(hilbert(sinal')');  % transpor e retornar a [Canais x Amostras]
+            % Inicializar matriz PLV
+            plvMat = zeros(nCan, nCan);
+            % Calcular PLV para cada par de canais
+            for i = 1:nCan
+                for j = i:nCan
+                    deltaPhi = phase(i,:) - phase(j,:);
+                    plvMat(i,j) = abs(mean(exp(1j*deltaPhi)));
+                    plvMat(j,i) = plvMat(i,j); % simétrica
+                end
+            end
+            plv_mats{s,t,e} = plvMat;
+        end
+    end
+end
+fprintf('PLV calculado para todos os sujeitos, trials e épocas.\n');
+end
+
+function features = CFMedidasEstatisticas(conn_all, thresh)
+if nargin < 2
+    thresh = 0.5; % limiar padrão para grau
+end
+
+NumSuj = size(conn_all,1);
+NumTr  = size(conn_all,2);
+NumEp  = size(conn_all,3);
+
+% Exemplo: armazenar em célula ou matriz
+features = [];  % acumulador de vetores
+
+for s = 1:NumSuj
+    for tr = 1:NumTr
+        for ep = 1:NumEp
+            
+            M = conn_all{s,tr,ep};   % matriz NxN de conectividade
+            
+            if isempty(M)
+                continue;
+            end
+            
+            %===== 1) MEDIDAS GLOBAIS =====
+            mean_conn = mean(M(:));
+            var_conn  = var(M(:));
+
+            % Evitar log(0) na entropia
+            M = M(:);
+            M = M - min(M);         % remove valores negativos, se existirem
+            M = M + eps;            % evita zeros
+
+            % Normalização correta
+            M = M / sum(M);
+
+            % Entropia de Shannon
+            entropy_M = -sum(M .* log(M));
+
+
+            % --- Outras métricas com a matriz original M (sem alterar!)
+            max_conn = max(M(:));
+            %min_conn = min(M(:));
+
+            %..Maxímo e mínimo
+            max_conn = max(M(:));
+            min_conn = min(M(:)); %..Está dando 0, problemático com PCA
+            
+            
+            %===== 3) ORGANIZAR VETOR DE FEATURES =====
+            feat_vec = [mean_conn, var_conn, entropy_M, ...
+                        max_conn, min_conn];
+            
+            % Concatenar no dataset final
+            features = [features; feat_vec];
+            
+        end
+    end
+end
+
+end
+
+function features = CFMedidasRedes(conn_all)
+
+if nargin < 2
+    thresh = 0.5; % limiar padrão para grau
+end
+
+NumSuj = size(conn_all,1);
+NumTr  = size(conn_all,2);
+NumEp  = size(conn_all,3);
+
+% Exemplo: armazenar em célula ou matriz
+features = [];  % acumulador de vetores
+
+for s = 1:NumSuj
+    for tr = 1:NumTr
+        for ep = 1:NumEp
+            
+            M = conn_all{s,tr,ep};   % matriz NxN de conectividade
+            
+            if isempty(M)
+                continue;
+            end
+            
+            %===== 2) MEDIDAS LOCAIS =====
+            degree   = sum(M > thresh, 2); % vetor Nx1
+            strength = sum(M, 2);          % vetor Nx1
+            
+            mean_degree   = mean(degree);
+            mean_strength = mean(strength);
+            
+            
+            %===== 3) ORGANIZAR VETOR DE FEATURES =====
+            feat_vec = [mean_degree, mean_strength];
+            
+            % Concatenar no dataset final
+            features = [features; feat_vec];
+            
+        end
+    end
+end
+
+end
+%..........................................................................
+
+
+% Matriz de Medidas -> Prefixo MDM.........................................
+function [X, feature_names] = MDMMontarMatriz(varargin)
+feature_names = {};
+X_list = {};  % lista temporária para concatenar
+
+for i = 1:length(varargin)
+    data = varargin{i};
+    
+    if isstruct(data)
+        fields = fieldnames(data);
+        for f = 1:length(fields)
+            val = data.(fields{f});
+            sz = size(val);
+            
+            % Supondo formato [Sujeito x Canal x Trial x Epoca]
+            if numel(sz) == 4
+                [NumS, NumCh, NumTr, NumEp] = deal(sz(1), sz(2), sz(3), sz(4));
+                NumSamples = NumS * NumTr * NumEp;
+                
+                % Inicializar vetor para armazenar medida
+                X_field = zeros(NumSamples, NumCh);
+                
+                row_idx = 1;
+                for s = 1:NumS
+                    for tr = 1:NumTr
+                        for ep = 1:NumEp
+                            X_field(row_idx, :) = squeeze(val(s,:,tr,ep));
+                            row_idx = row_idx + 1;
+                        end
+                    end
+                end
+                
+                X_list{end+1} = X_field;
+                
+                % Nomes das features
+                for ch = 1:NumCh
+                    feature_names{end+1} = sprintf('%s_ch%d', fields{f}, ch);
+                end
+            else
+                % Para structs 2D ou outros formatos
+                X_list{end+1} = val;
+                if isvector(val)
+                    feature_names{end+1} = fields{f};
+                else
+                    for col = 1:size(val,2)
+                        feature_names{end+1} = sprintf('%s_col%d', fields{f}, col);
+                    end
+                end
+            end
+        end
+        
+    elseif isnumeric(data)
+        sz = size(data);
+        if sz(1) ~= 1 && sz(2) ~= 1
+            X_list{end+1} = data;
+            % Nomes genéricos
+            for col = 1:sz(2)
+                feature_names{end+1} = sprintf('num%d', col);
+            end
+        else
+            X_list{end+1} = data(:);  % vetorizar
+            feature_names{end+1} = 'vector';
+        end
+    else
+        error('Tipo de dado não suportado');
+    end
+end
+% Concatenar horizontalmente todas as medidas
+X = horzcat(X_list{:});
+end
+
+function X_norm = MDMNormalizar(X, method)
+
+switch lower(method)
+    case 'zscore'
+        X_norm = (X - mean(X,1)) ./ std(X,[],1);
+    case 'minmax'
+        X_min = min(X,[],1);
+        X_max = max(X,[],1);
+        X_norm = (X - X_min) ./ (X_max - X_min);
+    case 'robust'
+        X_med = median(X,1);
+        X_iqr = iqr(X,1);
+        X_norm = (X - X_med) ./ X_iqr;
+    otherwise
+        error('Método de normalização inválido. Use "zscore", "minmax" ou "robust".');
+end
+end
+%..........................................................................
+
+
+% Redução de Dimensionalidade -> Prefixo RD................................
+function [Z, V, lambda, explained] = RDPCA(X, varargin)
+ % média móvel, para evitar valores com NaN
+ for i = 1:size(X,2)
+    col = X(:, i);
+    col(isnan(col)) = mean(col(~isnan(col)));
+    X(:, i) = col;
+ end
+    %Centralização dos dados
+    X = double(X);                 % Garante formato double
+    mu = mean(X, 1);               % Média de cada coluna (feature)
+    Xc = X - mu;                   % Dados centralizados
+
+    %Matriz de covariância
+    C = cov(Xc);
+
+
+    %Autovalores e Autovetores
+    [V, D] = eig(C);               % Decomposição espectral
+    [lambda, idx] = sort(diag(D), 'descend');  % Ordena autovalores
+    V = V(:, idx);                 % Reorganiza autovetores
+
+    %Variância explicada
+    totalVar = sum(lambda);
+    explained = cumsum(lambda) / totalVar * 100;
+
+    %Seleção do número de componentes (k)
+    k = length(lambda);  % Padrão: mantém tudo
+    if ~isempty(varargin)
+        if strcmpi(varargin{1}, 'k')
+            k = varargin{2};
+        elseif strcmpi(varargin{1}, 'var')
+            k = find(explained >= varargin{2}, 1, 'first');
+        end
+    end
+
+    V = V(:, 1:k);            % Mantém os k componentes principais
+    Z = Xc * V;               % Projeção dos dados
+
+end
+
+function RDPlotar(explained, lambda)
+    figure;
+    
+    %Plotar variância explicada
+    subplot(1, 2, 1);
+    bar(explained, 'FaceAlpha', 0.7);
+    xlabel('Componente Principal');
+    ylabel('Variância Explicada (%)');
+    title('Variância Explicada por Componente');
+    grid on;
+
+    %Curve Scree Plot (autovalores)
+    if nargin > 1
+        subplot(1, 2, 2);
+        plot(lambda, '-o', 'LineWidth', 1.5);
+        xlabel('Componente Principal');
+        ylabel('Autovalor');
+        title('Scree Plot (Autovalores)');
+        grid on;
+    end
+
+end
+%..........................................................................
+
+
+% Classificação -> Prefixo CL..............................................
+function Y = CLMontarVetor(NumSujeito, NumTrial, NumEpocas, labels_trials)
+    Y = []; % Vetor final de rótulos
+
+    for s = 1:NumSujeito
+        for tr = 1:NumTrial
+            label_tr = labels_trials(s, tr);  % Classe do trial (1 a 4)
+            % Repete o rótulo para cada época do trial
+            Y = [Y; repmat(label_tr, NumEpocas, 1)];
+        end
+    end
+end
+
+function folds = CLKFold(X, Y, method, info, k)
+    if nargin < 3
+        error('É necessário especificar o método de validação.');
+    end
+
+    switch upper(method)
+
+        case 'KFOLD'
+            if nargin < 5
+                error('Para KFold, forneça o número de folds k.');
+            end
+            cv = cvpartition(Y, 'KFold', k);
+            for i = 1:k
+                folds(i).trainIdx = training(cv, i);
+                folds(i).testIdx = test(cv, i);
+            end
+
+        case 'LOSO'
+            if nargin < 4 || isempty(info)
+                error('Para LOSO, forneça o vetor com IDs dos sujeitos.');
+            end
+            uniqueSubjects = unique(info);
+            for i = 1:length(uniqueSubjects)
+                testSubj = uniqueSubjects(i);
+                folds(i).testIdx  = (info == testSubj);
+                folds(i).trainIdx = ~folds(i).testIdx;
+            end
+
+        otherwise
+            error('Método não reconhecido. Use ''KFold'' ou ''LOSO''.');
+    end
+end
+
+function resultados = CLTreinamento(X, Y, metodo_validacao, classificador)
+
+    % Criação do modelo
+    switch classificador
+        case 'LDA'
+            modelo = fitcdiscr(X, Y);
+        case 'SVM'
+            modelo = fitcsvm(X, Y, 'KernelFunction', 'rbf');
+        case 'KNN'
+            modelo = fitcknn(X, Y, 'NumNeighbors',5);
+        otherwise
+            error('Classificador não reconhecido.');
+    end
+
+    % Validação cruzada
+    switch metodo_validacao
+        case 'KFold'
+            cv = crossval(modelo, 'KFold', 5);
+        case 'LOSO'
+            cv = crossval(modelo, 'Leaveout', 'on'); % Simula LOSO (ajustaremos depois)
+        otherwise
+            error('Método de validação não reconhecido.');
+    end
+
+    % Acurácia média
+    resultados.acuracia = 1 - kfoldLoss(cv, 'LossFun', 'ClassifError');
+    resultados.cm = confusionmat(Y, kfoldPredict(cv));
+
+    fprintf('Acurácia: %.2f %%\n', resultados.acuracia * 100);
+    disp('Matriz de Confusão:');
+    disp(resultados.cm);
+end
+%..........................................................................
+
+
+% Análise de Desempenho -> Prefixo AD......................................
+function ADResultados(cm)
+
+% Número de classes
+K = size(cm,1);
+
+% Nomes das classes (se não fornecido)
+class_names = arrayfun(@num2str, 1:K, 'UniformOutput', false);
+
+% Normalizar por linha (percentual)
+cm_percent = 100*cm ./ sum(cm,2);
+
+% Plotar matriz de confusão
+figure;
+imagesc(cm_percent);
+colormap(jet);
+colorbar;
+xlabel('Classe Prevista'); ylabel('Classe Real');
+title('Matriz de Confusão (%)');
+axis square;
+set(gca,'XTick',1:K,'XTickLabel',class_names);
+set(gca,'YTick',1:K,'YTickLabel',class_names);
+
+% Adicionar valores no gráfico
+textStrings = num2str(cm_percent(:),'%0.1f');
+textStrings = strtrim(cellstr(textStrings));
+[x,y] = meshgrid(1:K);
+hStrings = text(x(:),y(:),textStrings(:), 'HorizontalAlignment','center', 'Color','w');
+
+% Métricas de desempenho
+accuracy = sum(diag(cm))/sum(cm(:));
+precision = diag(cm)./sum(cm,1)';  % TP / (TP+FP)
+recall    = diag(cm)./sum(cm,2);   % TP / (TP+FN)
+F1        = 2*(precision.*recall)./(precision+recall);
+
+% MCC (Matthews Correlation Coefficient) - multiclass
+t_sum = sum(cm,2);  % total por classe real
+p_sum = sum(cm,1)'; % total por classe prevista
+c = trace(cm);
+s = sum(cm(:));
+MCC_num = c*s - t_sum'*p_sum;
+MCC_den = sqrt( (s^2 - p_sum'*p_sum) * (s^2 - t_sum'*t_sum) );
+MCC = MCC_num / MCC_den;
+
+% Exibir métricas
+fprintf('Acurácia global: %.2f %%\n', accuracy*100);
+for k = 1:K
+    fprintf('Classe %s -> Precision: %.2f %% | Recall: %.2f %% | F1-score: %.2f %%\n', ...
+        class_names{k}, precision(k)*100, recall(k)*100, F1(k)*100);
+end
+fprintf('MCC global: %.3f\n', MCC);
+end
+%..........................................................................
 
