@@ -7,6 +7,12 @@ nome_input = 'EEG_Data_BCI_IV_2a.mat';
 nome_output = 'BCI_IV2a_preprocessed.mat';
 load([pathdataset nome_input]);
 
+%Carregar parte das funções -> Quando aninhadas estouravam a memória
+%Prioridade para funções com maior complexidade computacional
+baseDir = fileparts(matlab.desktop.editor.getActiveFilename);
+funcDir = fullfile(baseDir, 'heavy_computing');
+addpath(genpath(funcDir));
+
 disp('Etapa de Carregamento Finalizada')
 disp('-------------------------------------------------------------------')
 %..........................................................................
@@ -104,15 +110,32 @@ disp('-------------------------------------------------------------------')
 correlacao = CFCorrelacao(EEG_data);
 
 %% Phase-Locking-Value -> "Sincronização de sinais EEG"
-plv = CFPLV(EEG_data, fs);
+%plv = CFPLV(EEG_data, fs);
+baseDir = pwd;
+plv_dir_name = 'PLVs';
+path_plv_results = fullfile(baseDir, plv_dir_name);
+
+[NumSujeito, ~, NumAmo, NumEpocas, NumTrial] = size(EEG_data);
+for s = 1:NumSujeito
+    fprintf('\n Processando PLV em lotes. Sujeito: %d/%d\n', s, NumSujeito);
+    EEG_sujeito_atual = permute(squeeze(EEG_data(s, :, :, :, :)), [3 2 1 4]);
+    plv_sujeito = CFPLV_SingleSubject(EEG_sujeito_atual, fs);
+    nome_arquivo = fullfile(path_plv_results, sprintf('plv_sujeito_%d.mat', s));
+    save(nome_arquivo, 'plv_sujeito', '-v7.3');
+    fprintf('PLV do Sujeito %d salvo em %s\n', s, nome_arquivo);
+    clear plv_sujeito EEG_sujeito_atual;
+end
 
 %% Medidas Estastísticas
 Medidas_correlacao_estastisticas = CFMedidasEstatisticas(correlacao);
 Medidas_correlacao_redes = CFMedidasRedes(correlacao);
 
 %% Medidas Topológicas
-Medidas_PLV_estatisticas = CFMedidasEstatisticas(plv);
-Medidas_PLV_Redes = CFMedidasRedes(plv);
+% Medidas_PLV_estatisticas = CFMedidasEstatisticas(plv);
+% Medidas_PLV_Redes = CFMedidasRedes(plv);
+
+[Medidas_PLV_estatisticas, Medidas_PLV_Redes] = CFMedidasAgregadas_PLV(NumSujeito, path_plv_results);
+clear PLV_agregado;
 
 disp('Etapa de Conectividade Funcional Finalizada');
 disp('-------------------------------------------------------------------')
@@ -737,36 +760,6 @@ function corr_mats = CFCorrelacao(EEG_data)
         end
     end
     fprintf('Finalizado: Matrizes de correlação geradas!\n');
-end
-
-function plv_mats = CFPLV(EEG_data, fs)
-
-[nSuj, nTrials, nEp, nCan, nAmo] = size(EEG_data);
-plv_mats = cell(nSuj, nTrials, nEp);
-
-for s = 1:nSuj
-    fprintf('Processando Sujeito %d/%d...\n', s, nSuj);
-    for t = 1:nTrials
-        for e = 1:nEp
-            % Sinal do trial/época atual [Canais x Amostras]
-            sinal = squeeze(EEG_data(s,t,e,:,:));
-            % Transformada de Hilbert para fase
-            phase = angle(hilbert(sinal')');  % transpor e retornar a [Canais x Amostras]
-            % Inicializar matriz PLV
-            plvMat = zeros(nCan, nCan);
-            % Calcular PLV para cada par de canais
-            for i = 1:nCan
-                for j = i:nCan
-                    deltaPhi = phase(i,:) - phase(j,:);
-                    plvMat(i,j) = abs(mean(exp(1j*deltaPhi)));
-                    plvMat(j,i) = plvMat(i,j); % simétrica
-                end
-            end
-            plv_mats{s,t,e} = plvMat;
-        end
-    end
-end
-fprintf('PLV calculado para todos os sujeitos, trials e épocas.\n');
 end
 
 function features = CFMedidasEstatisticas(conn_all, thresh)
