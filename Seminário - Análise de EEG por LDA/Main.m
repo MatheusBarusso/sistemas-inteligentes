@@ -12,6 +12,9 @@ load([pathdataset nome_input]);
 baseDir = fileparts(matlab.desktop.editor.getActiveFilename);
 funcDir = fullfile(baseDir, 'heavy_computing');
 addpath(genpath(funcDir));
+baseDir = pwd;
+plv_dir_name = 'PLVs';
+path_plv_results = fullfile(baseDir, plv_dir_name);
 
 disp('Etapa de Carregamento Finalizada')
 disp('-------------------------------------------------------------------')
@@ -54,11 +57,11 @@ LimiarAmplitude = 100;
 fprintf('Total de trials ruins: %d\n', sum(bad_epoch(:)));
 
 %Remoção de artefatos -> Descomentar as linhas abaixo se for processar
-%[EEG_clean, S_all, W_all, removed_all] = PPRemoveArtefatosICA(EEG_data);
-%save([pathdataset 'EEG_Data_SemArtefatos.mat'],'EEG_clean','S_all','W_all','removed_all','-v7.3');
+[EEG_clean, S_all, W_all, removed_all] = PPRemoveArtefatosICA(EEG_data);
+save([pathdataset 'EEG_Data_SemArtefatos.mat'],'EEG_clean','S_all','W_all','removed_all','-v7.3');
 
 %Comentar a linha abaixo se for rodar a remoção de artefatos
-load([pathdataset 'EEG_Data_SemArtefatos.mat']); %-> Load p/ teste
+%load([pathdataset 'EEG_Data_SemArtefatos.mat']); %-> Load p/ teste
 
 EEG_data = EEG_clean; 
 clear EEG_clean
@@ -87,18 +90,18 @@ disp('-------------------------------------------------------------------')
 
 %% Mineração
 %Estatísica
-Medidas_estatisticas = MNMedidasEstatisticas(EEG_data);
+Medidas_estatisticas = MNMedidasEstatisticas(EEG_epochs);
 
 %Parâmetros de Hjorth
-Medidas_hjorth = MNMedidasHjorth(EEG_data);
+Medidas_hjorth = MNMedidasHjorth(EEG_epochs);
 
 %Potência das bandas -> Descomentar linhas abaixo para rodar mineração
-%fs = 128;
-%plot_flag = 0;
-%band_features = MNPotenciaBandas(EEG_epochs, fs, chan_names, plot_flag);
+fs = 128;
+plot_flag = 0;
+band_features = MNPotenciaBandas(EEG_epochs, fs, chan_names, plot_flag);
 
 %Comentar a linha abaixo se for rodar a mineração
-load([pathdataset 'Medidas_Bandas_Potencia.mat']); % -> Load p/ testes
+%load([pathdataset 'Medidas_Bandas_Potencia.mat']); % -> Load p/ testes
 
 disp('Etapa de Mineração Finalizada');
 disp('-------------------------------------------------------------------')
@@ -107,23 +110,20 @@ disp('-------------------------------------------------------------------')
 
 %% Conectividade Funcional
 %Correlação
-correlacao = CFCorrelacao(EEG_data);
+correlacao = CFCorrelacao(EEG_epochs);
 
 %% Phase-Locking-Value -> "Sincronização de sinais EEG"
 %plv = CFPLV(EEG_data, fs);
-baseDir = pwd;
-plv_dir_name = 'PLVs';
-path_plv_results = fullfile(baseDir, plv_dir_name);
 
 [NumSujeito, ~, NumAmo, NumEpocas, NumTrial] = size(EEG_data);
 for s = 1:NumSujeito
-    fprintf('\n Processando PLV em lotes. Sujeito: %d/%d\n', s, NumSujeito);
-    EEG_sujeito_atual = permute(squeeze(EEG_data(s, :, :, :, :)), [3 2 1 4]);
+    fprintf('\n PLV: Processando Sujeito %d/%d (Batching)...\n', s, NumSujeito);
+    dados_suj = squeeze(EEG_epochs(s, :, :, :, :));
+    EEG_sujeito_atual = permute(dados_suj, [4 3 1 2]);
     plv_sujeito = CFPLV_SingleSubject(EEG_sujeito_atual, fs);
     nome_arquivo = fullfile(path_plv_results, sprintf('plv_sujeito_%d.mat', s));
     save(nome_arquivo, 'plv_sujeito', '-v7.3');
-    fprintf('PLV do Sujeito %d salvo em %s\n', s, nome_arquivo);
-    clear plv_sujeito EEG_sujeito_atual;
+    clear plv_sujeito EEG_sujeito_atual dados_suj;
 end
 
 %% Medidas Estastísticas
@@ -133,6 +133,10 @@ Medidas_correlacao_redes = CFMedidasRedes(correlacao);
 %% Medidas Topológicas
 % Medidas_PLV_estatisticas = CFMedidasEstatisticas(plv);
 % Medidas_PLV_Redes = CFMedidasRedes(plv);
+
+if ~exist('NumSujeito', 'var')
+    NumSujeito = size(EEG_data, 1);
+end
 
 [Medidas_PLV_estatisticas, Medidas_PLV_Redes] = CFMedidasAgregadas_PLV(NumSujeito, path_plv_results);
 clear PLV_agregado;
@@ -144,9 +148,35 @@ disp('-------------------------------------------------------------------')
 
 %% Matriz de Medidas
 %Montagem da Matriz
-[X, feature_names] = MDMMontarMatriz(Medidas_estatisticas, Medidas_hjorth);
+[X, feature_names] = MDMMontarMatriz(Medidas_estatisticas, Medidas_hjorth, band_features, ...
+                                    Medidas_correlacao_estastisticas, Medidas_correlacao_redes, ...
+                                    Medidas_PLV_estatisticas, Medidas_PLV_Redes);
 
 %Normalização da Matriz com Medidas Concatenadas
+desvio_padrao = std(X, [], 1, 'omitnan'); % Calcula desvio ignorando NaNs
+cols_validas = desvio_padrao > 1e-6; % Mantém apenas colunas com variação
+if sum(~cols_validas) > 0
+    fprintf('Aviso: Removendo %d features constantes (sem variação).\n', sum(~cols_validas));
+    X = X(:, cols_validas);
+    feature_names = feature_names(cols_validas);
+end
+
+% 2. Tratamento de NaNs (Substituição pela média da coluna)
+% Isso resolve o problema dos trials de artefato que viraram NaN
+col_mean = mean(X, 1, 'omitnan');
+for i = 1:size(X, 2)
+    col = X(:, i);
+    idx_nan = isnan(col);
+    if any(idx_nan)
+        col(idx_nan) = col_mean(i); % Substitui NaN pela média daquela feature
+        X(:, i) = col;
+    end
+end
+
+% Verificação final de segurança
+X(isnan(X)) = 0; 
+X(isinf(X)) = 0;
+% ----------------------------------------
 X_norm = MDMNormalizar(X, 'zscore');
 
 disp('Etapa de Matriz de Medidas Finalizada');
@@ -168,7 +198,7 @@ disp('-------------------------------------------------------------------')
 
 %% Classificação
 %Vetor das classes
-[NumSujeito,NumCan,NumAmo,NumEpocas,NumTrial] = size(EEG_data);
+[NumSujeito,NumCan,NumAmo,NumEpocas,NumTrial] = size(EEG_epochs);
 Y = CLMontarVetor(NumSujeito, NumTrial, NumEpocas, labels);
 
 %Validação Cruzada -> k-fold
@@ -730,38 +760,6 @@ end
 %..........................................................................
 
 
-% Conectividade Funcional -> Prefixo CF....................................
-function corr_mats = CFCorrelacao(EEG_data)
-    % Dimensões dos dados
-    nSuj = size(EEG_data, 1);
-    nTrials = size(EEG_data, 2);
-    nEpocas = size(EEG_data, 3);
-    nCanais = size(EEG_data, 4);
-
-    % Pré-alocar célula para armazenar as matrizes
-    corr_mats = cell(nSuj, nTrials, nEpocas);
-
-    % Loop sobre tudo
-    for s = 1:nSuj
-        fprintf('Processando Sujeito %d/%d...\n', s, nSuj);
-
-        for t = 1:nTrials
-            for e = 1:nEpocas
-
-                % Dados: [Canais × Amostras]
-                sinal = squeeze(EEG_data(s, t, e, :, :));   
-
-                % Matriz de correlação entre canais
-                corrMat = corrcoef(sinal');   % transposto para [Amostras × Canais]
-
-                % Guardar
-                corr_mats{s, t, e} = corrMat;
-            end
-        end
-    end
-    fprintf('Finalizado: Matrizes de correlação geradas!\n');
-end
-
 function features = CFMedidasEstatisticas(conn_all, thresh)
 if nargin < 2
     thresh = 0.5; % limiar padrão para grau
@@ -868,75 +866,6 @@ end
 
 
 % Matriz de Medidas -> Prefixo MDM.........................................
-function [X, feature_names] = MDMMontarMatriz(varargin)
-feature_names = {};
-X_list = {};  % lista temporária para concatenar
-
-for i = 1:length(varargin)
-    data = varargin{i};
-    
-    if isstruct(data)
-        fields = fieldnames(data);
-        for f = 1:length(fields)
-            val = data.(fields{f});
-            sz = size(val);
-            
-            % Supondo formato [Sujeito x Canal x Trial x Epoca]
-            if numel(sz) == 4
-                [NumS, NumCh, NumTr, NumEp] = deal(sz(1), sz(2), sz(3), sz(4));
-                NumSamples = NumS * NumTr * NumEp;
-                
-                % Inicializar vetor para armazenar medida
-                X_field = zeros(NumSamples, NumCh);
-                
-                row_idx = 1;
-                for s = 1:NumS
-                    for tr = 1:NumTr
-                        for ep = 1:NumEp
-                            X_field(row_idx, :) = squeeze(val(s,:,tr,ep));
-                            row_idx = row_idx + 1;
-                        end
-                    end
-                end
-                
-                X_list{end+1} = X_field;
-                
-                % Nomes das features
-                for ch = 1:NumCh
-                    feature_names{end+1} = sprintf('%s_ch%d', fields{f}, ch);
-                end
-            else
-                % Para structs 2D ou outros formatos
-                X_list{end+1} = val;
-                if isvector(val)
-                    feature_names{end+1} = fields{f};
-                else
-                    for col = 1:size(val,2)
-                        feature_names{end+1} = sprintf('%s_col%d', fields{f}, col);
-                    end
-                end
-            end
-        end
-        
-    elseif isnumeric(data)
-        sz = size(data);
-        if sz(1) ~= 1 && sz(2) ~= 1
-            X_list{end+1} = data;
-            % Nomes genéricos
-            for col = 1:sz(2)
-                feature_names{end+1} = sprintf('num%d', col);
-            end
-        else
-            X_list{end+1} = data(:);  % vetorizar
-            feature_names{end+1} = 'vector';
-        end
-    else
-        error('Tipo de dado não suportado');
-    end
-end
-% Concatenar horizontalmente todas as medidas
-X = horzcat(X_list{:});
-end
 
 function X_norm = MDMNormalizar(X, method)
 
