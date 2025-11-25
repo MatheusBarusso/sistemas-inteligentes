@@ -1,5 +1,4 @@
 function [EEG_epochs,num_epochs] = PPSegmentar(EEG_data, fs, window_sec, overlap_sec)
-
 [S, C, N, T] = size(EEG_data);
 win_len = round(window_sec * fs);
 step = round((window_sec - overlap_sec) * fs);

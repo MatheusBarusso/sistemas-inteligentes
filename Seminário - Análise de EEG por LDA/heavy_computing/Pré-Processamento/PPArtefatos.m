@@ -1,6 +1,4 @@
 function [bad_epoch, EEG_clean] = PPArtefatos(EEG_data, ampThreshold)
-
-
 [NumSujeito, ~, ~, NumTrial] = size(EEG_data);
 
 bad_epoch = false(NumSujeito, NumTrial); % inicializa matriz de artefatos

@@ -1,4 +1,4 @@
-function X_norm = MDMNormalizar(X, method)
+function X_norm =MDMNormalizar(X, method)
 
 switch lower(method)
     case 'zscore'
@@ -12,7 +12,7 @@ switch lower(method)
         X_iqr = iqr(X,1);
         X_norm = (X - X_med) ./ X_iqr;
     otherwise
-        error('Método de normalização inválido. Use "zscore", "minmax" ou "robust".');
+        error('Método de normalização inválido. Use "zscore".');
 end
 
 end

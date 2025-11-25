@@ -4,10 +4,6 @@ function resultados = CLTreinamento(X, Y, metodo_validacao, classificador)
     switch classificador
         case 'LDA'
             modelo = fitcdiscr(X, Y);
-        case 'SVM'
-            modelo = fitcsvm(X, Y, 'KernelFunction', 'rbf');
-        case 'KNN'
-            modelo = fitcknn(X, Y, 'NumNeighbors',5);
         otherwise
             error('Classificador não reconhecido.');
     end
@@ -16,8 +12,6 @@ function resultados = CLTreinamento(X, Y, metodo_validacao, classificador)
     switch metodo_validacao
         case 'KFold'
             cv = crossval(modelo, 'KFold', 5);
-        case 'LOSO'
-            cv = crossval(modelo, 'Leaveout', 'on'); % Simula LOSO (ajustaremos depois)
         otherwise
             error('Método de validação não reconhecido.');
     end

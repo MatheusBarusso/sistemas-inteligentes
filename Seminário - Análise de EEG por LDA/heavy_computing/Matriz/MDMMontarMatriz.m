@@ -1,6 +1,4 @@
 function [X, feature_names] = MDMMontarMatriz(varargin)
-
-
 feature_names = {};
 X_list = {};  % lista temporária para concatenar
 

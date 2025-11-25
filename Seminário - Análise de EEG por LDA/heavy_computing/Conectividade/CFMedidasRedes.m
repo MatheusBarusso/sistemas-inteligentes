@@ -21,7 +21,7 @@ for s = 1:NumSuj
                 continue;
             end
             
-            %===== 2) MEDIDAS LOCAIS =====
+            % MEDIDAS LOCAIS
             degree   = sum(M > thresh, 2); % vetor Nx1
             strength = sum(M, 2);          % vetor Nx1
             
@@ -29,7 +29,7 @@ for s = 1:NumSuj
             mean_strength = mean(strength);
             
             
-            %===== 3) ORGANIZAR VETOR DE FEATURES =====
+            % ORGANIZAR VETOR DE FEATURES
             feat_vec = [mean_degree, mean_strength];
             
             % Concatenar no dataset final

@@ -1,6 +1,4 @@
 function [EEG_data_fs2,fs2] = PPReamostragem(EEG_data, fs, fs2)
-
-
 [NumSujeito,NumCan,NumAmo,NumTrial] = size(EEG_data);
 
       NumAmo2 = round(NumAmo * fs2/fs);

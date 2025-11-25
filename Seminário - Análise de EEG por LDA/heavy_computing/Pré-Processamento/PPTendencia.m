@@ -1,5 +1,4 @@
 function EEG_data = PPTendencia(EEG_data)
-
 [NumSujeito, NumCan, ~, NumTrial] = size(EEG_data);
 
 for s = 1:NumSujeito

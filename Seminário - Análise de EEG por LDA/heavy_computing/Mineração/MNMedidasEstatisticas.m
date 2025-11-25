@@ -1,5 +1,4 @@
 function features = MNMedidasEstatisticas(EEG_epochs)
-
 [S, C, N, E, T] = size(EEG_epochs);
 
 % Inicializar arrays

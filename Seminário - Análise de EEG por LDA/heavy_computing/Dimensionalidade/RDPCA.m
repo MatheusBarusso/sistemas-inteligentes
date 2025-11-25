@@ -7,35 +7,24 @@ function [Z, V, lambda, explained] = RDPCA(X, varargin)
     X(:, i) = col;
 end
 
-
-    % ======================
-    % 1) Centralização dos dados
-    % ======================
+    % Centralização dos dados
     X = double(X);                 % Garante formato double
     mu = mean(X, 1);               % Média de cada coluna (feature)
     Xc = X - mu;                   % Dados centralizados
 
-    % ======================
-    % 2) Matriz de covariância
-    % ======================
+    % Matriz de covariância
     C = cov(Xc);
 
-    % ======================
-    % 3) Autovalores e Autovetores
-    % ======================
+    % Autovalores e Autovetores
     [V, D] = eig(C);               % Decomposição espectral
     [lambda, idx] = sort(diag(D), 'descend');  % Ordena autovalores
     V = V(:, idx);                 % Reorganiza autovetores
 
-    % ======================
-    % 4) Variância explicada
-    % ======================
+    % Variância explicada
     totalVar = sum(lambda);
     explained = cumsum(lambda) / totalVar * 100;
 
-    % ======================
-    % 5) Seleção do número de componentes (k)
-    % ======================
+    % Seleção do número de componentes (k)
     k = length(lambda);  % Padrão: mantém tudo
 
     if ~isempty(varargin)

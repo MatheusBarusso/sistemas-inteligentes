@@ -1,5 +1,4 @@
 function [EEG_clean, S_all, W_all, removed_all] = PPRemoveArtefatosICA(EEG_data)
-
 [NumSujeito, NumCan, NumAmostras, NumTrial] = size(EEG_data);
 
 % Inicializações
@@ -8,7 +7,7 @@ S_all = cell(NumSujeito, NumTrial);
 W_all = cell(NumSujeito, NumTrial);
 removed_all = cell(NumSujeito, NumTrial);
 
-fprintf('\n=== Iniciando ICA puro para remoção de artefatos ===\n');
+fprintf('\nICA para remoção de artefatos processando\n');
 
 for s = 1:NumSujeito
     fprintf('\nSujeito %d/%d', s, NumSujeito);
@@ -16,7 +15,7 @@ for s = 1:NumSujeito
     for tr = 1:NumTrial
         fprintf('.');
         
-        % --- 1. Extrair trial (C x N)
+        % Extrair trial (C x N)
         X = squeeze(EEG_data(s, :, :, tr));
         
         % Verifica se o sinal é válido
@@ -25,23 +24,23 @@ for s = 1:NumSujeito
             continue;
         end
 
-        % --- 2. Centralizar dados (zero mean por canal)
+        % Centralizar dados (zero mean por canal)
         X = X - mean(X,2);
 
-        % --- 3. Whitening
+        % Whitening
         [C, N] = size(X);
         E = cov(X');
         [U, D] = eig(E);
         D_inv_sqrt = diag(1./sqrt(diag(D) + eps));  % evitar divisão por zero
         X_white = D_inv_sqrt * U' * X;
 
-        % --- 4. ICA via maximização da kurtosis
+        % ICA via maximização da kurtosis
         W = randn(C,C);
         maxIter = 500; tol = 1e-6;
         for iter = 1:maxIter
             W_old = W;
             Y = W*X_white;
-            gY = Y.^3; % não-linearidade para super-gaussianas
+            gY = Y.^3;
             W = (gY*Y')/N - 3*eye(C)*W;
             % Ortogonalização
             [Uo, ~, Vo] = svd(W);
@@ -52,27 +51,27 @@ for s = 1:NumSujeito
             end
         end
 
-        % --- 5. Componentes independentes
+        % Componentes independentes
         S = W * X_white;
 
-        % --- 6. Detecção automática de artefatos (desvio padrão alto)
+        % Detecção automática de artefatos (desvio padrão alto)
         std_IC = std(S,0,2);
         threshold = mean(std_IC) + 2*std(std_IC);
         removed_components = find(std_IC > threshold);
 
-        % --- 7. Zerar componentes artefatuais
+        % Zerar componentes artefatuais
         S_clean = S;
         S_clean(removed_components,:) = 0;
 
-        % --- 8. Reconstrução do EEG limpo
+        % Reconstrução do EEG limpo
         EEG_clean(s,:,:,tr) = pinv(W) * S_clean;
 
-        % --- 9. Armazenar resultados
+        % Armazenar resultados
         S_all{s,tr} = S;
         W_all{s,tr} = W;
         removed_all{s,tr} = removed_components;
     end
 end
 
-fprintf('\n\n=== ICA puro concluído com sucesso ===\n');
+fprintf('\nICA concluído\n');
 end

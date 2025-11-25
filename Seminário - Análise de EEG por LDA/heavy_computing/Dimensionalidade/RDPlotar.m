@@ -2,9 +2,7 @@ function RDPlotar(explained, lambda)
 
     figure;
     
-    % -------------------------------
-    % 1) Plotar variância explicada
-    % -------------------------------
+    % Plotar variância explicada
     subplot(1, 2, 1);
     bar(explained, 'FaceAlpha', 0.7);
     xlabel('Componente Principal');
@@ -12,9 +10,7 @@ function RDPlotar(explained, lambda)
     title('Variância Explicada por Componente');
     grid on;
 
-    % -------------------------------
-    % 2) Curve Scree Plot (autovalores)
-    % -------------------------------
+    % Autovalores
     if nargin > 1
         subplot(1, 2, 2);
         plot(lambda, '-o', 'LineWidth', 1.5);

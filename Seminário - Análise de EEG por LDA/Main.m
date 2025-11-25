@@ -17,7 +17,7 @@ disp('------------------------------------------------------------------');
 Sujeito = 1;
 Epoca = 1;
 Canal = 1;
-%Canais selecionados para função de plot de diferentes classes
+%Canais selecionados para diferentes plots
 canais = [8 12];
 
 PlotCanal(EEG_data, chan_names, fs, Sujeito, Canal, Epoca);
@@ -79,7 +79,7 @@ EEG_data = PPReRe(EEG_data, chan_names, chan_coords, TipoReRef);
 %Segmentação em épocas
 window_sec = 1;      % 1 segundo por janela
 overlap_sec = 0.5;   % 50% de sobreposição
-[EEG_epochs, NumEpocas] = PPSegmentar(EEG_data, fs, window_sec, overlap_sec);
+[EEG_data, NumEpocas] = PPSegmentar(EEG_data, fs, window_sec, overlap_sec); % EEG_data SE USAR _epochs DATA FICA 4-D PRECISA SER 5-D AAAAAAAAAAAAAAAAAA
 
 
 disp('Etapa de Pré-Processamento finalizada');
@@ -100,6 +100,7 @@ Medidas_hjorth = MNMedidasHjorth(EEG_data); %talvez mudar EEG_data?
 %fs = 128;
 %plot_flag = 0;
 %band_features = MNPotenciaBandas(EEG_epochs, fs, chan_names, plot_flag);
+%save([pathdataset 'Medidas_Bandas_Potencia.mat'], 'band_features');
 
 %Comentar a linha abaixo se for rodar a mineração
 load([pathdataset 'Medidas_Bandas_Potencia.mat']); % -> Load p/ testes
@@ -115,18 +116,17 @@ disp('-------------------------------------------------------------------')
 correlacao = CFCorrelacao(EEG_data);  %talvez mudar EEG_data?
 
 
-%% Phase-Locking-Value -> "Sincronização de sinais EEG"
+%Phase-Locking-Value -> "Sincronização de sinais EEG"
 plv = CFPLV(EEG_data, fs);
 
 
-%% Medidas Estastísticas
+%Medidas Estastísticas
 Medidas_correlacao_estastisticas = CFMedidasEstatisticas(correlacao);
 Medidas_correlacao_redes = CFMedidasRedes(correlacao);
 
-%% Medidas Topológicas
+%Medidas Topológicas
 Medidas_PLV_estatisticas = CFMedidasEstatisticas(plv);
 Medidas_PLV_Redes = CFMedidasRedes(plv);
-
 
 disp('Etapa de Conectividade Funcional Finalizada');
 disp('-------------------------------------------------------------------')
@@ -141,7 +141,6 @@ disp('-------------------------------------------------------------------')
 %Normalização
 X_norm = MDMNormalizar(X, 'zscore');
 
-
 disp('Etapa de Matriz de Medidas Finalizada');
 disp('-------------------------------------------------------------------')
 %..........................................................................
@@ -151,7 +150,6 @@ disp('-------------------------------------------------------------------')
 %Reducao de Dimensionalidade
 [X_pca, V, lambda, explained] = RDPCA(X_norm, 'var', 95);
 RDPlotar(explained, lambda);
-
 
 disp('Etapa de Redução de Dimensionalidade Finalizada');
 disp('-------------------------------------------------------------------')
@@ -165,10 +163,10 @@ Y = CLMontarVetor(NumSujeito, NumTrial, NumEpocas, labels);
 
 
 %K-Fold
-folds = CLKFold(X, Y, 'KFold', [], 5)
+folds = CLKFold(X, Y, 'KFold', [], 5);
 
 
-%Classificar -> KFold ou LOSO // LDA
+%Classificar -> KFold // LDA
 metodo_validacao = 'KFold';
 classificador = 'LDA';
 resultados = CLTreinamento(X, Y, metodo_validacao, classificador);
@@ -186,6 +184,10 @@ ADResultados(MatrizConfusao);
 %..........................................................................
 
 %% SESSÃO DE FUNÇÕES DE BAIXA COMPLEXIDADE
+%
+% Antes todas funções ficavam aqui, mas deixar todas aninhadas acabava com
+% a performance, não sei exatamente o porque, então modularizei
+%
 % Visualização -> Prefixo Plot.............................................
 function PlotCanal(EEG_data,chan_names,fs,Sujeito,Canal,Epoca)
 [~,~,NumAmo,~] = size(EEG_data);
@@ -324,7 +326,7 @@ sgtitle(sprintf('PSD - Sujeito %d, Trial %d', Sujeito, Trial), 'FontSize',14);
 end
 %..........................................................................
 
-% Plot Pós Redução de Dimensionalidade por PCA
+% Classificação e Análise de Desempenho -> Prefixos CL e AD................
 function RDPlotar(explained, lambda)
     figure;
     
@@ -352,7 +354,6 @@ function RDPlotar(explained, lambda)
 
 end
 
-
 function Y = CLMontarVetor(NumSujeito, NumTrial, NumEpocas, labels_trials)
     Y = []; % Vetor final de rótulos
 
@@ -364,7 +365,6 @@ function Y = CLMontarVetor(NumSujeito, NumTrial, NumEpocas, labels_trials)
         end
     end
 end
-
 
 function ADResultados(cm)
 
@@ -417,4 +417,4 @@ for k = 1:K
 end
 fprintf('MCC global: %.3f\n', MCC);
 end
-
+%..........................................................................

@@ -1,23 +1,12 @@
 function corr_mats = CFCorrelacao(EEG_data)
-% fMatrizConectividadeCorrelacao
-% Calcula matrizes de correlação para todos os sujeitos, trials e épocas.
-%
-% Entrada:
-%   EEG_data: [Sujeitos × Trials × Epocas × Canais × Amostras]
-%
-% Saída:
-%   corr_mats: [Sujeitos × Trials × Epocas] celulas contendo matrizes (Canais × Canais)
-
     % Dimensões dos dados
     nSuj = size(EEG_data, 1);
     nTrials = size(EEG_data, 2);
     nEpocas = size(EEG_data, 3);
     nCanais = size(EEG_data, 4);
 
-    % Pré-alocar célula para armazenar as matrizes
     corr_mats = cell(nSuj, nTrials, nEpocas);
 
-    % Loop sobre tudo
     for s = 1:nSuj
         fprintf('Processando Sujeito %d/%d...\n', s, nSuj);
 

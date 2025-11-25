@@ -21,7 +21,7 @@ for s = 1:NumSuj
                 continue;
             end
             
-            %===== 1) MEDIDAS GLOBAIS =====
+            % MEDIDAS GLOBAIS
             mean_conn = mean(M(:));
             var_conn  = var(M(:));
 
@@ -36,17 +36,13 @@ for s = 1:NumSuj
             % Entropia de Shannon
             entropy_M = -sum(M .* log(M));
 
-
-            % --- Outras métricas com a matriz original M (sem alterar!)
             max_conn = max(M(:));
             %min_conn = min(M(:));
-
-            %..Maxímo e mínimo
             max_conn = max(M(:));
-            min_conn = min(M(:)); %..Está dando 0, problemático com PCA
+            min_conn = min(M(:));
             
             
-            %===== 3) ORGANIZAR VETOR DE FEATURES =====
+            % ORGANIZAR VETOR DE FEATURES
             feat_vec = [mean_conn, var_conn, entropy_M, ...
                         max_conn, min_conn];
             

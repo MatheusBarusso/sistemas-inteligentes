@@ -1,5 +1,4 @@
 function bandpower_features = MNPotenciaBandas(EEG_epochs, fs, chan_names, plot_flag)
-
 % Definir bandas
 bands = struct('delta',[0.5 4], 'theta',[4 8], 'alpha',[8 13], 'beta',[13 30], 'gamma',[30 45]);
 
