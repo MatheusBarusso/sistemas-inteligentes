@@ -1,54 +1,60 @@
-function Medidas_Stats = CFMedidasEstatisticas(data)
-% CFMEDIDASESTATISTICAS - Calcula medidas estatísticas (mean, var, std, etc.)
-%
-% ENTRADA:
-% data: Dados em formato de célula {Sujeito, Trial, Epoca} com matrizes [Canais x Canais] (para conectividade)
-%       ou matriz N-dimensional [S x C x N x E x T] (para dados EEG brutos)
+function features = CFMedidasEstatisticas(conn_all, thresh)
 
-    % Assume que a entrada é uma célula de matrizes de conectividade 
-    % (formato usado no bloco de agregação PLV)
-    if iscell(data)
-        [nSuj, nTrial, nEp] = size(data);
-        if nSuj == 0 || nTrial == 0 || nEp == 0
-             warning('Célula de entrada vazia.');
-             Medidas_Stats = [];
-             return;
-        end
-        nCan = size(data{1}, 1); % Assumindo matrizes simétricas [C x C]
-        
-        % Inicializa o array de saída
-        Medidas_Stats = zeros(nSuj * nTrial * nEp, 7); 
-        idx = 1;
+if nargin < 2
+    thresh = 0.5; % limiar padrão para grau
+end
 
-        for s = 1:nSuj
-            for t = 1:nTrial
-                for e = 1:nEp
-                    mat = data{s, t, e};
-                    if isempty(mat)
-                        Medidas_Stats(idx, :) = NaN; % Evita erros com épocas ruins
-                    else
-                        % Converte a matriz de conectividade [C x C] em um vetor de features
-                        % Usando apenas a parte triangular superior (excluindo a diagonal)
-                        upper_tri = mat(triu(true(nCan), 1)); 
+NumSuj = size(conn_all,1);
+NumTr  = size(conn_all,2);
+NumEp  = size(conn_all,3);
 
-                        Medidas_Stats(idx, 1) = mean(upper_tri(:));
-                        Medidas_Stats(idx, 2) = var(upper_tri(:));
-                        Medidas_Stats(idx, 3) = std(upper_tri(:));
-                        Medidas_Stats(idx, 4) = max(upper_tri(:)) - min(upper_tri(:)); % PTP
-                        Medidas_Stats(idx, 5) = sqrt(mean(upper_tri(:).^2)); % RMS
-                        Medidas_Stats(idx, 6) = kurtosis(upper_tri(:));
-                        Medidas_Stats(idx, 7) = skewness(upper_tri(:));
-                    end
-                    idx = idx + 1;
-                end
+% Exemplo: armazenar em célula ou matriz
+features = [];  % acumulador de vetores
+
+for s = 1:NumSuj
+    for tr = 1:NumTr
+        for ep = 1:NumEp
+            
+            M = conn_all{s,tr,ep};   % matriz NxN de conectividade
+            
+            if isempty(M)
+                continue;
             end
+            
+            %===== 1) MEDIDAS GLOBAIS =====
+            mean_conn = mean(M(:));
+            var_conn  = var(M(:));
+
+            % Evitar log(0) na entropia
+            M = M(:);
+            M = M - min(M);         % remove valores negativos, se existirem
+            M = M + eps;            % evita zeros
+
+            % Normalização correta
+            M = M / sum(M);
+
+            % Entropia de Shannon
+            entropy_M = -sum(M .* log(M));
+
+
+            % --- Outras métricas com a matriz original M (sem alterar!)
+            max_conn = max(M(:));
+            %min_conn = min(M(:));
+
+            %..Maxímo e mínimo
+            max_conn = max(M(:));
+            min_conn = min(M(:)); %..Está dando 0, problemático com PCA
+            
+            
+            %===== 3) ORGANIZAR VETOR DE FEATURES =====
+            feat_vec = [mean_conn, var_conn, entropy_M, ...
+                        max_conn, min_conn];
+            
+            % Concatenar no dataset final
+            features = [features; feat_vec];
+            
         end
-        
-    else
-        % Caso a função seja chamada com dados EEG [Suj x Canal x Amostras x Época x Trial]
-        % (Mantido para compatibilidade, embora o foco atual seja conectividade)
-        % Note: Esta parte deve refletir o código original que gerou Medidas_Stats/Medidas_hjorth
-        % No contexto atual, esta função é chamada com CÉLULAS de conectividade.
-        error('Formato de entrada não suportado para dados brutos EEG. Esperada célula de conectividade.');
     end
+end
+
 end

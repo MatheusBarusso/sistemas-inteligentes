@@ -1,73 +1,73 @@
 function [X, feature_names] = MDMMontarMatriz(varargin)
-% MDMMONTARMATRIZ - Monta a matriz de features completa (X) a partir de 
-% N entradas, lidando com structs 4D (Mineração) e arrays 2D (Conectividade).
-%
-% ENTRADAS: N structs 4D [Suj x Canal x Epoca x Trial] ou arrays 2D [Amostras x Features]
-% SAÍDAS: X [23328 x 337] e feature_names
+
 
 feature_names = {};
 X_list = {};  % lista temporária para concatenar
 
 for i = 1:length(varargin)
     data = varargin{i};
-
+    
     if isstruct(data)
-        % --- PROCESSA STRUCTS 4D (MINERAÇÃO/HJORTH) ---
         fields = fieldnames(data);
         for f = 1:length(fields)
             val = data.(fields{f});
             sz = size(val);
-
-            % Supondo formato [Sujeito x Canal x Epoca x Trial]
+            
+            % Supondo formato [Sujeito x Canal x Trial x Epoca]
             if numel(sz) == 4
-                [NumS, NumCh, NumEp, NumTr] = deal(sz(1), sz(2), sz(3), sz(4));
-
-                % O total de Amostras é Sujeito * Epoca * Trial (9 * 81 * 32 = 23328)
-                NumSamples = NumS * NumEp * NumTr; 
-
-                % 1. Reordenar: Move a dimensão do Canal (Feature) para o final
-                % [Suj x Canal x Epoca x Trial] -> [Suj x Epoca x Trial x Canal]
-                val_reordenado = permute(val, [3 4 1 2]); 
-
-                % 2. Achatamento para [NumSamples x NumCh]
-                X_field = reshape(val_reordenado, NumSamples, NumCh);
-
+                [NumS, NumCh, NumTr, NumEp] = deal(sz(1), sz(2), sz(3), sz(4));
+                NumSamples = NumS * NumTr * NumEp;
+                
+                % Inicializar vetor para armazenar medida
+                X_field = zeros(NumSamples, NumCh);
+                
+                row_idx = 1;
+                for s = 1:NumS
+                    for tr = 1:NumTr
+                        for ep = 1:NumEp
+                            X_field(row_idx, :) = squeeze(val(s,:,tr,ep));
+                            row_idx = row_idx + 1;
+                        end
+                    end
+                end
+                
                 X_list{end+1} = X_field;
-
+                
                 % Nomes das features
                 for ch = 1:NumCh
-                    feature_names{end+1} = sprintf('%s_%s_ch%d', fields{f}, fields{f}, ch);
+                    feature_names{end+1} = sprintf('%s_ch%d', fields{f}, ch);
                 end
-
-            else % Se a struct for 2D (caso não esperado, mas por segurança)
-                error('Formato de struct não reconhecido. Esperado 4D para Mineração.');
+            else
+                % Para structs 2D ou outros formatos
+                X_list{end+1} = val;
+                if isvector(val)
+                    feature_names{end+1} = fields{f};
+                else
+                    for col = 1:size(val,2)
+                        feature_names{end+1} = sprintf('%s_col%d', fields{f}, col);
+                    end
+                end
             end
         end
-
+        
     elseif isnumeric(data)
-        % --- PROCESSA ARRAYS NUMÉRICOS 2D (PLV/CORRELAÇÃO) ---
         sz = size(data);
-        if ndims(data) == 2
+        if sz(1) ~= 1 && sz(2) ~= 1
             X_list{end+1} = data;
-
-            % Nomes genéricos, ajustando para não conflitar
-            base_name = ['feat_array_', num2str(i)];
+            % Nomes genéricos
             for col = 1:sz(2)
-                feature_names{end+1} = sprintf('%s_col%d', base_name, col);
+                feature_names{end+1} = sprintf('num%d', col);
             end
         else
-            error('Array numérico de entrada não é 2D. Verifique a agregação do PLV/Correlação.');
+            X_list{end+1} = data(:);  % vetorizar
+            feature_names{end+1} = 'vector';
         end
-
     else
-        warning('Ignorando entrada de tipo desconhecido na coluna %d', i);
+        error('Tipo de dado não suportado');
     end
 end
 
-% CONCATENAÇÃO FINAL
+% Concatenar horizontalmente todas as medidas
 X = horzcat(X_list{:});
 
 end
-
-
-
